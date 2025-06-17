@@ -43,7 +43,7 @@ def deriv_bot_real(token, stake, usar_martingale, fator_martingale, limite_lucro
                 "currency": "USD",
                 "duration": 1,
                 "duration_unit": "t",
-                "symbol": "R_100"
+                "symbol": "R_10"
             }))
 
             data = json.loads(ws.recv())
