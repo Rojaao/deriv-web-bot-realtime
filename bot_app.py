@@ -37,7 +37,7 @@ def deriv_bot_real(token, stake, usar_martingale, fator_martingale, limite_lucro
             ws.send(json.dumps({
                 "proposal": 1,
                 "amount": entrada,
-                "barrier": "+0.1" if proposal_type == "CALL" else "-0.1",
+                # "barrier": "+0.1" if proposal_type == "CALL" else "-0.1",
                 "basis": "stake",
                 "contract_type": proposal_type,
                 "currency": "USD",
