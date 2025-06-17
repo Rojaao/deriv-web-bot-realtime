@@ -1,3 +1,4 @@
+
 import streamlit as st
 import websocket
 import json
@@ -16,7 +17,7 @@ usar_martingale = st.checkbox("🎯 Usar Martingale", value=True)
 operacao = st.selectbox("📊 Tipo de operação", ["CALL", "PUT"])
 iniciar = st.button("🚀 Iniciar Robô")
 
-log_area = st.empty()
+log = st.empty()
 
 def deriv_bot_real(token, stake, usar_martingale, fator_martingale, limite_lucro, limite_perda, operacao):
     lucro_total = 0
@@ -29,12 +30,7 @@ def deriv_bot_real(token, stake, usar_martingale, fator_martingale, limite_lucro
             ws.connect("wss://ws.derivws.com/websockets/v3?app_id=1089")
 
             ws.send(json.dumps({"authorize": token}))
-            response = json.loads(ws.recv())
-            if "error" in response:
-                log_area.error(f"Erro ao autorizar: {response['error']['message']}")
-                break
-
-            log_area.info("✅ Conectado e autorizado com sucesso.")
+            ws.recv()
 
             proposal_type = "CALL" if operacao == "CALL" else "PUT"
 
@@ -50,66 +46,57 @@ def deriv_bot_real(token, stake, usar_martingale, fator_martingale, limite_lucro
                 "symbol": "R_100"
             }))
 
-            proposal = json.loads(ws.recv())
-            if "error" in proposal:
-                log_area.error(f"Erro na proposta: {proposal['error']['message']}")
+            data = json.loads(ws.recv())
+            if "proposal" not in data:
+                log.error("Erro ao obter proposta.")
                 break
 
-            proposal_id = proposal["proposal"]["id"]
+            proposal_id = data["proposal"]["id"]
             ws.send(json.dumps({"buy": proposal_id, "price": entrada}))
             buy_response = json.loads(ws.recv())
 
-            if "error" in buy_response:
-                log_area.error(f"Erro ao comprar: {buy_response['error']['message']}")
+            if "buy" not in buy_response:
+                log.error("Erro ao comprar contrato.")
                 break
 
-            log_area.info(f"📈 Operação iniciada - {proposal_type} com ${entrada:.2f}")
+            log.info(f"💰 Entrada: ${entrada:.2f} | Tipo: {proposal_type}")
 
-            # Aguardando resultado
-            result = json.loads(ws.recv())
-            if "error" in result:
-                log_area.error(f"Erro no resultado: {result['error']['message']}")
-                break
-
-            if "buy" in result and "contract_id" in result["buy"]:
-                contract_id = result["buy"]["contract_id"]
-                log_area.info(f"🆔 Contrato ativo: {contract_id}")
-            
-            # Verificando resultado do contrato
             while True:
-                update = json.loads(ws.recv())
-                if "profit" in update:
-                    profit = float(update["profit"])
-                    if profit > 0:
-                        lucro_total += profit
-                        perda_total = 0
-                        entrada = stake
-                        log_area.success(f"✅ Ganhou ${profit:.2f} | Lucro Total: ${lucro_total:.2f}")
-                    else:
-                        perda_total += entrada
-                        log_area.warning(f"❌ Perdeu ${entrada:.2f} | Perda Acumulada: ${perda_total:.2f}")
-                        entrada = entrada * fator_martingale if usar_martingale else stake
+                result = json.loads(ws.recv())
+                if "transaction_id" in result:
+                    continue
+                if "buy" in result or "profit" in str(result):
                     break
 
+            if "profit" in str(result):
+                profit = float(result.get("profit", entrada))
+                lucro_total += profit
+                perda_total = 0
+                log.success(f"✅ Ganhou ${profit:.2f} | Lucro Total: ${lucro_total:.2f}")
+                entrada = stake
+            else:
+                perda_total += entrada
+                log.warning(f"❌ Perdeu ${entrada:.2f} | Perda Acumulada: ${perda_total:.2f}")
+                entrada = entrada * fator_martingale if usar_martingale else stake
+
             if lucro_total >= limite_lucro:
-                log_area.success("🎯 Limite de lucro atingido. Robô finalizado.")
+                log.success("🎯 Limite de lucro atingido. Robô finalizado.")
                 break
             if perda_total >= limite_perda:
-                log_area.error("🛑 Limite de perda atingido. Robô finalizado.")
+                log.error("🛑 Limite de perda atingido. Robô finalizado.")
                 break
 
             ws.close()
             time.sleep(2)
-
         except Exception as e:
-            log_area.error(f"Erro inesperado: {str(e)}")
+            log.error(f"Erro: {e}")
             break
 
 if iniciar:
     if token:
-        thread = threading.Thread(target=deriv_bot_real, args=(
-            token, valor_inicial, usar_martingale, fator_martingale,
-            limite_lucro, limite_perda, operacao))
-        thread.start()
+        t = threading.Thread(target=deriv_bot_real, args=(
+            token, valor_inicial, usar_martingale,
+            fator_martingale, limite_lucro, limite_perda, operacao))
+        t.start()
     else:
-        st.warning("⚠️ Por favor, insira seu token Deriv.")
+        st.error("🔑 Por favor, insira seu token da Deriv.")
